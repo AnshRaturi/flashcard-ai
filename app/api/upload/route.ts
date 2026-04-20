@@ -115,54 +115,8 @@ Focus specifically on creating flashcards for:
          throw new Error("Unable to parse Gemini 1st pass output into expected JSON");
       }
 
-      // SECOND AI PASS (Refinement)
-      try {
-        const refinementInstruction = `You are a strict editorial AI optimizing study material.
-Your tasks:
-1. Identify and REMOVE any duplicated logical concepts.
-2. Improve clarity, making answers highly concise for rapid spaced repetition.
-3. INJECT exactly one highly relevant "Example: " into the answer field if it helps contextualize the topic.
-Return ONLY the refined JSON directly matching the input flashcard schema array.`;
-
-        const refinementResponse = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: `Refine these flashcards:\n\n${JSON.stringify(outputJson)}`,
-          config: {
-            systemInstruction: refinementInstruction,
-            temperature: 0.3,
-            responseMimeType: "application/json",
-            responseSchema: {
-               // Must match exactly the same Type extraction format to prevent validation crash
-               type: Type.OBJECT,
-               properties: {
-                  flashcards: {
-                     type: Type.ARRAY,
-                     items: {
-                        type: Type.OBJECT,
-                        properties: {
-                           question: { type: Type.STRING },
-                           answer: { type: Type.STRING },
-                           topic: { type: Type.STRING },
-                           difficulty: { type: Type.STRING }
-                        },
-                        required: ["question", "answer", "topic", "difficulty"]
-                     }
-                  }
-               },
-               required: ["flashcards"]
-            }
-          }
-        });
-        
-        const refinedText = refinementResponse.text || '{"flashcards": []}';
-        const refinedJson = JSON.parse(refinedText);
-        if (refinedJson.flashcards && refinedJson.flashcards.length > 0) {
-           outputJson = refinedJson;
-           console.log("Second AI Pass: Successfully refined, deduped, and injected examples.");
-        }
-      } catch (refineError: any) {
-        console.warn("Second pass refinement failed implicitly, reverting to raw extraction.", refineError.message);
-      }
+      // Skip second AI pass to prevent Vercel 10s timeouts
+      console.log("Skipping refinement pass to ensure Vercel hobby tier 10-second limit is not breached.");
 
     } catch (apiError: any) {
       console.warn("Gemini API Blocked (Limit 0). Operating strictly in Local Heuristic Fallback Mode.");
