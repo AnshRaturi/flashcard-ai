@@ -11,7 +11,6 @@ interface Flashcard {
   answer: string;
   topic: string;
   difficulty: string;
-  id: string;
   source_file?: string;
   next_review_date: string;
   interval: number;
