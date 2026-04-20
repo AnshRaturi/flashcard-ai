@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     // System Prompt emphasizing Flashcard properties
-    const systemInstruction = `You are a Flashcard generation engine. Your goal is to take input text and generate high-quality educational flashcards.
+    const systemInstruction = `You are a Flashcard generation engine. Your goal is to take input text and generate a maximum of 10 high-quality educational flashcards.
 
 Focus specifically on creating flashcards for:
 1. Core concepts
@@ -81,7 +81,7 @@ Focus specifically on creating flashcards for:
       // Prompt Gemini with strictly typed schema
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: `Please extract concepts and generate flashcards from this text:\n\n${text.substring(0, 30000)}`,
+        contents: `Please extract concepts and generate up to 10 critical flashcards from this text:\n\n${text.substring(0, 8000)}`,
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.7,
