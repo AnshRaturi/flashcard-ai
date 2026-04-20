@@ -55,7 +55,7 @@ Focus specifically on creating flashcards for:
     try {
       // Prompt Gemini with strictly typed schema and passing PDF natively
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: [
             {
                role: "user",
