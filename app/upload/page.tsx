@@ -35,11 +35,23 @@ export default function UploadPage() {
         body: formData
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to process PDF");
+        const text = await response.text();
+        if (response.status === 413) throw new Error("File is too large for Vercel Free Tier (Max 4.5MB). Try a smaller 1-2 page PDF.");
+        if (response.status === 504) throw new Error("Vercel Timeout (10s) reached. Try a much smaller file.");
+        if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
+            throw new Error(`Vercel Server Error (${response.status}). The free tier server crashed before finishing the response.`);
+        }
+        
+        try {
+           const errData = JSON.parse(text);
+           throw new Error(errData.error || "Failed to process PDF");
+        } catch(e) {
+           throw new Error("Failed to process PDF. Check server logs.");
+        }
       }
+
+      const data = await response.json();
 
       if (data.flashcards && data.flashcards.length > 0) {
          // Save flashcards globally to localstorage so the Study route can access them
