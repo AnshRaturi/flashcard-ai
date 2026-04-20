@@ -43,12 +43,14 @@ export default function UploadPage() {
             throw new Error(`Vercel Server Error (${response.status}). The free tier server crashed before finishing the response.`);
         }
         
+        let errorMsg = "Failed to process PDF. Check server logs.";
         try {
            const errData = JSON.parse(text);
-           throw new Error(errData.error || "Failed to process PDF");
+           if (errData.error) errorMsg = errData.error;
         } catch(e) {
-           throw new Error("Failed to process PDF. Check server logs.");
+           // JSON parse failed
         }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
