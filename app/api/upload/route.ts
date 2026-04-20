@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 
@@ -9,15 +8,6 @@ export const maxDuration = 60; // Set Vercel timeout to 60 seconds
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "", 
 });
-
-// Primitive text cleanup function for trimming common web-to-PDF artifacts
-const cleanExtractedText = (rawText: string) => {
-  let cleaned = rawText;
-  cleaned = cleaned.replace(/\n\d+\s+sites[\s\S]*/gi, "");
-  cleaned = cleaned.replace(/\nPoetry Foundation[\s\S]*/gi, "");
-  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
-  return cleaned.trim();
-};
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,25 +36,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Convert the File object to a Buffer for pdf-parse
+    // Convert the File object to a Buffer 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    // Initialize the parser class with the PDF buffer
-    const parser = new PDFParse({ data: buffer });
-    
-    let text = "";
-    try {
-      const result = await parser.getText();
-      text = cleanExtractedText(result.text);
-    } finally {
-      // Always call destroy to free memory
-      await parser.destroy();
-    }
-
-    if (!text || text.length < 10) {
-       return NextResponse.json({ error: "Not enough readable text found in PDF." }, { status: 400 });
-    }
+    const base64Data = buffer.toString("base64");
 
     // System Prompt emphasizing Flashcard properties
     const systemInstruction = `You are a Flashcard generation engine. Your goal is to take input text and generate a maximum of 10 high-quality educational flashcards.
@@ -78,10 +53,18 @@ Focus specifically on creating flashcards for:
     let outputJson;
 
     try {
-      // Prompt Gemini with strictly typed schema
+      // Prompt Gemini with strictly typed schema and passing PDF natively
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: `Please extract concepts and generate up to 10 critical flashcards from this text:\n\n${text.substring(0, 8000)}`,
+        contents: [
+            {
+               role: "user",
+               parts: [
+                 { inlineData: { data: base64Data, mimeType: "application/pdf" } },
+                 { text: "Please carefully read this document and extract concepts to generate up to 10 critical flashcards." }
+               ]
+            }
+        ],
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.7,
@@ -119,70 +102,12 @@ Focus specifically on creating flashcards for:
       console.log("Skipping refinement pass to ensure Vercel hobby tier 10-second limit is not breached.");
 
     } catch (apiError: any) {
-      console.warn("Gemini API Blocked (Limit 0). Operating strictly in Local Heuristic Fallback Mode.");
+      console.warn("Gemini API Error:", apiError);
       
-      // Intelligent Dynamic Fallback: Scrape the raw extracted text into flashcards locally without Gemini
-      const rawSentences = text.split(/(?<=[.?!])\s+/).filter(s => s.length > 15);
-      const generatedCards = [];
-      
-      for(let i=0; i < rawSentences.length; i++) {
-         const sentence = rawSentences[i].trim();
-         if (sentence.length < 20) continue; // Skip useless short garbage strings
-         
-         // Looking for definitions, key terms, or compound statements
-         if (sentence.includes(":")) {
-             const parts = sentence.split(":");
-             if (parts[0].length < 60) {
-                 generatedCards.push({
-                    question: `Explain the concept: ${parts[0].trim()}`,
-                    answer: parts.slice(1).join(":").trim(),
-                    topic: "Key Feature",
-                    difficulty: "medium"
-                 });
-             }
-         } else if (sentence.toLowerCase().includes(" is ")) {
-             const parts = sentence.split(/ is /i);
-             if (parts[0].length < 60) {
-                 generatedCards.push({
-                     question: `What is ${parts[0].trim()}?`,
-                     answer: `It is ${parts.slice(1).join(" is ").trim()}`,
-                     topic: "Definition",
-                     difficulty: "easy"
-                 });
-             }
-         } else if (sentence.includes(",")) {
-             const parts = sentence.split(",");
-             // Use the first clause as a prompt if it's decently long
-             if (parts[0].length > 15 && parts[0].length < 80) {
-                 generatedCards.push({
-                     question: `Complete this concept: "${parts[0].trim()}..."`,
-                     answer: sentence,
-                     topic: "Concept",
-                     difficulty: "medium"
-                 });
-             }
-         } else {
-             // For standard factual sentences, ask to discuss or define the whole statement
-             generatedCards.push({
-                 question: `Analyze and recall this fact: "${sentence}"`,
-                 answer: sentence,
-                 topic: "Recall",
-                 difficulty: "hard"
-             });
-         }
-
-         // Expanded to allow up to 30 flashcards to deeply cover full PDFs
-         if (generatedCards.length >= 30) break;
-      }
-
-      if (generatedCards.length === 0) {
-         return NextResponse.json(
-            { error: "The uploaded PDF appears to be a flat image, screenshot, or a protected document without a readable text layer. We require an OCR-capable scanner or a native text PDF." },
-            { status: 400 }
-         );
-      }
-
-      outputJson = { flashcards: generatedCards };
+      return NextResponse.json(
+          { error: "Google Gemini AI refused the prompt or failed parsing the PDF natively: " + apiError.message },
+          { status: 500 }
+      );
     }
 
     // Persist uniquely to Supabase via backend service binding bridging Env vars securely  
@@ -212,7 +137,7 @@ Focus specifically on creating flashcards for:
     return NextResponse.json({
       success: true,
       flashcards: outputJson.flashcards,
-      textPreview: text.substring(0, 300) + "..."
+      textPreview: "PDF natively processed by Gemini."
     });
 
   } catch (error: any) {
