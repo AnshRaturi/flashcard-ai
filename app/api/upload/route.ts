@@ -3,6 +3,8 @@ import { PDFParse } from "pdf-parse";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 
+export const maxDuration = 60; // Set Vercel timeout to 60 seconds
+
 // Ensure the application throws or catches cleanly if not set
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "", 
